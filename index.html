@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta name="robots" content="noindex, nofollow">
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex, nofollow" />
   <title>Inventory Asset Lookup</title>
   <script src="https://unpkg.com/html5-qrcode"></script>
   <style>
@@ -33,21 +33,24 @@
       margin: 0 auto;
     }
 
+    .locked-box {
+      max-width: 420px;
+      margin: 80px auto;
+      background: #fff;
+      padding: 28px 20px;
+      border-radius: 14px;
+      text-align: center;
+      border: 1px solid var(--border);
+      box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
+    }
+
     .header {
       text-align: center;
       margin-bottom: 18px;
     }
 
-    .header h1 {
-      margin: 0;
-      font-size: 22px;
-    }
-
-    .header p {
-      margin: 4px 0 0;
-      font-size: 13px;
-      color: var(--muted);
-    }
+    .header h1 { margin: 0; font-size: 22px; }
+    .header p { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
 
     .search-card, .result-card {
       background: var(--card);
@@ -58,10 +61,7 @@
       border: 1px solid var(--border);
     }
 
-    .input-group {
-      display: flex;
-      gap: 8px;
-    }
+    .input-group { display: flex; gap: 8px; }
 
     input[type="text"] {
       flex: 1;
@@ -85,11 +85,7 @@
       gap: 6px;
     }
 
-    .btn-primary {
-      background: var(--primary);
-      color: #fff;
-    }
-
+    .btn-primary { background: var(--primary); color: #fff; }
     .btn-primary:hover { background: var(--primary-dark); }
 
     .scan-row {
@@ -99,17 +95,8 @@
       margin-top: 10px;
     }
 
-    .btn-scan {
-      background: #0f172a;
-      color: #fff;
-      font-size: 13px;
-    }
-
-    .btn-photo {
-      background: #334155;
-      color: #fff;
-      font-size: 13px;
-    }
+    .btn-scan { background: #0f172a; color: #fff; font-size: 13px; }
+    .btn-photo { background: #334155; color: #fff; font-size: 13px; }
 
     #reader, #file-reader {
       width: 100%;
@@ -162,27 +149,11 @@
       margin-top: 18px;
     }
 
-    .btn-copy {
-      background: #e2e8f0;
-      color: #0f172a;
-    }
+    .btn-copy { background: #e2e8f0; color: #0f172a; }
+    .btn-share { background: var(--success); color: #fff; }
 
-    .btn-share {
-      background: var(--success);
-      color: #fff;
-    }
-
-    .status-msg {
-      text-align: center;
-      padding: 20px;
-      color: var(--muted);
-      font-size: 14px;
-    }
-
-    .error-msg {
-      color: #dc2626;
-      font-weight: 600;
-    }
+    .status-msg { text-align: center; padding: 20px; color: var(--muted); font-size: 14px; }
+    .error-msg { color: #dc2626; font-weight: 600; }
 
     .toast {
       position: fixed;
@@ -203,7 +174,12 @@
   </style>
 </head>
 <body>
-  <div class="container">
+  <div class="locked-box" id="lockedScreen" style="display:none;">
+    <h2>🔒 Private Access Only</h2>
+    <p style="color:#64748b; font-size:14px;">Please use the authorized shared link to view this page.</p>
+  </div>
+
+  <div class="container" id="mainApp" style="display:none;">
     <div class="header">
       <h1>Inventory Asset Lookup</h1>
       <p>Scan QR code or enter Serial Number to view details</p>
@@ -241,9 +217,10 @@
   <div class="toast" id="toast">Copied to clipboard!</div>
 
   <script>
-    // ඔයාගේ Google Apps Script Web App URL එක මෙතනට දාන්න
-    const API_URL = "https://script.google.com/macros/s/AKfycby6zSovvzbDyF_YPEb2xdronnCXLWOZ2zhR9HnazY0BoB0c7ofkOh7zV3MqxD7Xt6a-0Q/exec";
+    // ඔයාගේ Apps Script Web App URL එක මෙතනට දාන්න
+    const API_URL = "https://script.google.com/macros/s/AKfycbww5Fxn3AZuRHjThSJKpR5tuSl3MFph7d5JC8KVM5vJYwQXfOJl_F4KuO6XY0jUq7HM3Q/exec";
 
+    let accessKey = "";
     let currentFormattedText = "";
     let currentShareUrl = "";
     let html5QrCode = null;
@@ -251,6 +228,15 @@
 
     window.onload = function () {
       const params = new URLSearchParams(window.location.search);
+      accessKey = (params.get("k") || "").trim();
+
+      if (!accessKey) {
+        document.getElementById("lockedScreen").style.display = "block";
+        return;
+      }
+
+      document.getElementById("mainApp").style.display = "block";
+
       const snParam = params.get("sn");
       if (snParam) {
         document.getElementById("snInput").value = snParam;
@@ -287,9 +273,16 @@
       statusMsg.textContent = "Searching...";
 
       try {
-        const url = `${API_URL}?sn=${encodeURIComponent(sn)}`;
+        const url = `${API_URL}?k=${encodeURIComponent(accessKey)}&sn=${encodeURIComponent(sn)}`;
         const response = await fetch(url);
         const res = await response.json();
+
+        if (res.unauthorized) {
+          document.getElementById("mainApp").style.display = "none";
+          document.getElementById("lockedScreen").style.display = "block";
+          return;
+        }
+
         renderResult(res);
       } catch (err) {
         statusMsg.className = "status-msg error-msg";
@@ -331,7 +324,7 @@
 
       currentFormattedText = lines.join("\n");
       const baseUrl = window.location.href.split("?")[0];
-      currentShareUrl = `${baseUrl}?sn=${encodeURIComponent(res.serialNumber)}`;
+      currentShareUrl = `${baseUrl}?k=${encodeURIComponent(accessKey)}&sn=${encodeURIComponent(res.serialNumber)}`;
     }
 
     function copyDetails() {
@@ -349,9 +342,7 @@
       };
 
       if (navigator.share) {
-        try {
-          await navigator.share(shareData);
-        } catch (err) {}
+        try { await navigator.share(shareData); } catch (err) {}
       } else {
         navigator.clipboard.writeText(shareData.text);
         showToast("Details & Link copied! Ready to paste & share.");
@@ -363,9 +354,7 @@
       const btn = document.getElementById("scanToggleBtn");
 
       if (isScanning && html5QrCode) {
-        try {
-          await html5QrCode.stop();
-        } catch (_) {}
+        try { await html5QrCode.stop(); } catch (_) {}
         readerDiv.style.display = "none";
         btn.textContent = "📷 Live Camera";
         isScanning = false;
